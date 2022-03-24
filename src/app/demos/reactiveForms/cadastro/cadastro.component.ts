@@ -1,32 +1,80 @@
-import { NgBrazilValidators } from 'ng-brazil';
-import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Usuario } from './model/usuario';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChildren } from '@angular/core';
+import { FormBuilder, FormControl, FormControlName, FormGroup, Validators } from '@angular/forms';
 import { utilsBr } from 'js-brasil';
+import { NgBrazilValidators } from 'ng-brazil';
+import { CustomValidators } from 'ng2-validation';
+import { fromEvent, merge, Observable } from 'rxjs';
+
+import { DisplayMessage, GenericValidator, ValidationMessages } from './generic-form-validation';
+import { Usuario } from './model/usuario';
 
 @Component({
   selector: 'app-cadastro',
   templateUrl: './cadastro.component.html',
   styles: []
 })
-export class CadastroComponent implements OnInit {
+export class CadastroComponent implements OnInit, AfterViewInit {
+
+  @ViewChildren(FormControlName, { read: ElementRef }) formInputElements: ElementRef[];
 
   cadastroForm: FormGroup;
   usuario: Usuario;
   formResult: string = '';
   MASKS = utilsBr.MASKS;
   
+  validationMessages: ValidationMessages;
+  genericValidator: GenericValidator;
+  displayMessage: DisplayMessage = {};
 
-  constructor(private fb: FormBuilder) { }
+  constructor(private fb: FormBuilder) {
+    this.validationMessages = {
+      nome: {
+        minLength: 'O nome deve ter no minimo 2 caracteres',
+        maxLength: 'O nome deve ter no maximo 10 caracteres',
+        required: 'O nome é requerido'
+      },
+      cpf: {
+        required: 'Informa o cpf',
+        cpf: 'cpf em formato invalido'
+      },
+      email: {
+        required: 'Informe o email',
+        email: 'email invalido'
+      },
+      senha : {
+        required: 'Informe o senha',
+        rangeLength: 'A senha deve possuir entre 6 e 15 caracteres'
+      },
+      senhaConfirmacao: {
+        required: 'Informe o senha novamente',
+        rangeLength: 'A senha deve possuir entre 6 e 15 caracteres',
+        equalTo: 'As senhas nao conferem'
+      }
+    };
+
+    this.genericValidator = new GenericValidator(this.validationMessages);
+   }
 
   ngOnInit() {
+    let senha = new FormControl('', [Validators.required, CustomValidators.rangeLength([6,15])]);
+    let senhaConfirm = new FormControl('', [Validators.required, CustomValidators.rangeLength([6,15]), CustomValidators.equalTo(senha)]);
+
     this.cadastroForm = this.fb.group({
-      nome: ['', Validators.required],
+      nome: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(10)]],
       cpf: ['',[Validators.required, NgBrazilValidators.cpf]],
       email: ['',[Validators.required, Validators.email]],
-      senha: [''],
-      senhaConfirmacao: ['']
+      senha: senha,
+      senhaConfirmacao: senhaConfirm
     })
+  }
+
+  ngAfterViewInit(): void {
+    let controlBlurs: Observable<any>[] = this.formInputElements
+    .map((formControl: ElementRef) => fromEvent(formControl.nativeElement, 'blur'));
+
+    merge(...controlBlurs).subscribe(() => {
+      this.displayMessage = this.genericValidator.processarMensagens(this.cadastroForm);
+    });
   }
 
   adicionarUsuario() {
